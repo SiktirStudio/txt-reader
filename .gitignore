@@ -1,0 +1,17 @@
+# Build directories
+build/
+build-*/
+out/
+dist/
+cmake-build-*/
+
+# IDE / tooling
+.vscode/
+.idea/
+*.pro.user
+*.user
+CMakeLists.txt.user
+
+# OS
+.DS_Store
+Thumbs.db

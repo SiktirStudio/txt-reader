@@ -1,0 +1,121 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Linux, os: ubuntu-24.04 }
+          - { name: Windows, os: windows-2022 }
+          - { name: macOS, os: macos-14 }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          cache: true
+
+      - name: Install Linux runtime dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgl1 libegl1 libfontconfig1 libxkbcommon0
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Self-test (Linux)
+        if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ./build/bin/novapad --selftest
+
+      - name: Screenshots (Linux)
+        if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ./build/bin/novapad --screenshot shots
+
+      - name: Upload screenshots
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: shots/
+          if-no-files-found: warn
+
+      # ---------------- Packaging ----------------
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then VER="$GITHUB_REF_NAME"; else VER="dev"; fi
+          mkdir -p dist/NovaPad-linux-x64
+          cp build/bin/novapad dist/NovaPad-linux-x64/
+          QTLIBS="$(qmake -query QT_INSTALL_LIBS)"
+          QTPLUGINS="$(qmake -query QT_INSTALL_PLUGINS)"
+          ldd build/bin/novapad | awk '{print $3}' | grep 'libQt' | sort -u | \
+            xargs -r -I{} cp -Ln {} dist/NovaPad-linux-x64/ || true
+          mkdir -p dist/NovaPad-linux-x64/plugins
+          cp -a "$QTPLUGINS/platforms" dist/NovaPad-linux-x64/plugins/ 2>/dev/null || true
+          cp -a "$QTPLUGINS/imageformats" dist/NovaPad-linux-x64/plugins/ 2>/dev/null || true
+          printf '[Paths]\nPlugins = plugins\n' > dist/NovaPad-linux-x64/qt.conf
+          tar -czf "NovaPad-$VER-Linux-x64.tar.gz" -C dist NovaPad-linux-x64
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build/bin -Recurse -Filter novapad.exe | Select-Object -First 1
+          if (-not $exe) { throw "novapad.exe not found" }
+          windeployqt --release --no-translations --dir package $exe.FullName
+          Copy-Item $exe.FullName package/
+          $ver = if ($env:GITHUB_REF -like 'refs/tags/*') { $env:GITHUB_REF_NAME } else { 'dev' }
+          Compress-Archive -Path package -DestinationPath "NovaPad-$ver-Windows-x64.zip"
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then VER="$GITHUB_REF_NAME"; else VER="dev"; fi
+          macdeployqt build/bin/novapad.app -dmg
+          mv build/bin/novapad.dmg "NovaPad-$VER-macOS-arm64.dmg"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovaPad-${{ matrix.name }}
+          path: |
+            NovaPad-*.zip
+            NovaPad-*.tar.gz
+            NovaPad-*.dmg
+          if-no-files-found: warn
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            NovaPad-*.zip
+            NovaPad-*.tar.gz
+            NovaPad-*.dmg
