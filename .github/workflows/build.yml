@@ -50,6 +50,12 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ./build/bin/novapad --selftest
 
+      - name: Stress test (Linux)
+        if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ./build/bin/novapad --stress
+
       - name: Screenshots (Linux)
         if: runner.os == 'Linux'
         env:

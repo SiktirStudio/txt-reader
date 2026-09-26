@@ -34,6 +34,7 @@ public:
     static int runSelfTest();
     bool takeScreenshots(const QString &dir, const QString &themeName);
     void loadDemoContent();
+    bool stressTest();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
