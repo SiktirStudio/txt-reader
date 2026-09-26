@@ -48,6 +48,10 @@ int main(int argc, char *argv[])
     // Developer / CI helpers -------------------------------------------------
     if (args.removeOne(QStringLiteral("--selftest")))
         return MainWindow::runSelfTest();
+    if (args.removeOne(QStringLiteral("--stress"))) {
+        MainWindow stressWin(nullptr);
+        return stressWin.stressTest() ? 0 : 1;
+    }
 
     QString shotDir;
     const int shotIdx = args.indexOf(QStringLiteral("--screenshot"));

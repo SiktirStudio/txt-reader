@@ -162,13 +162,20 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    for (TabData *t : m_tabs) {
+    // Draining m_tabs first is important: deleting a highlighter touches its
+    // document, which can emit textChanged -> updateStatusBar -> tabForWidget,
+    // which must never iterate already-deleted TabData entries. Disconnecting
+    // our handlers makes the teardown fully re-entrancy-proof.
+    const QList<TabData *> tabs = m_tabs;
+    m_tabs.clear();
+    for (TabData *t : tabs) {
+        t->editor->document()->disconnect(this);
+        t->editor->disconnect(this);
         delete t->highlighter;
         t->highlighter = nullptr;
         delete t->editor;
         delete t;
     }
-    m_tabs.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -586,20 +593,24 @@ MainWindow::TabData *MainWindow::addTab(const QString &filePath)
         tab->encodingLabel = QStringLiteral("UTF-8");
     }
 
-    connect(tab->editor->document(), &QTextDocument::modificationChanged, this,
-            [this, tab](bool) {
-                if (m_tabs.contains(tab))
-                    updateTabTitle(*tab);
+    // Capture the Editor pointer by value: TabData may be deleted before the
+    // deleteLater() editor goes away, and these lambdas only ever compare the
+    // pointer value, so they can never touch freed memory.
+    Editor *editor = tab->editor;
+    connect(editor->document(), &QTextDocument::modificationChanged, this,
+            [this, editor](bool) {
+                if (TabData *t = tabForWidget(editor))
+                    updateTabTitle(*t);
                 updateWindowTitle();
             });
-    connect(tab->editor, &QPlainTextEdit::cursorPositionChanged, this, [this, tab]() {
-        if (m_tabWidget->currentWidget() == tab->editor) {
+    connect(editor, &QPlainTextEdit::cursorPositionChanged, this, [this, editor]() {
+        if (m_tabWidget->currentWidget() == editor) {
             updateStatusBar();
             updateWordHighlights();
         }
     });
-    connect(tab->editor, &QPlainTextEdit::textChanged, this, [this, tab]() {
-        if (m_tabWidget->currentWidget() == tab->editor) {
+    connect(editor, &QPlainTextEdit::textChanged, this, [this, editor]() {
+        if (m_tabWidget->currentWidget() == editor) {
             updateStatusBar();
             if (m_findPanel->isVisible())
                 updateSearchHighlights();
@@ -1908,6 +1919,44 @@ bool MainWindow::takeScreenshots(const QString &dir, const QString &themeName)
     ok &= grab().save(QDir(dir).filePath(QStringLiteral("novapad-light.png")));
 
     return ok;
+}
+
+// ---------------------------------------------------------------------------
+// Stress test (--stress): cycles tabs with focus, edits, close and deferred
+// deletion to shake out use-after-free regressions in the tab logic.
+// ---------------------------------------------------------------------------
+
+bool MainWindow::stressTest()
+{
+    const int cycles = 120;
+    for (int i = 0; i < cycles; ++i) {
+        addTab(QString());
+        if (Editor *e = currentEditor()) {
+            e->setPlainText(QStringLiteral("cycle %1\nalpha beta\nfoo() { return 42; }\n").arg(i));
+            e->setFocus();
+            QTextCursor c(e->document());
+            c.setPosition(3);
+            e->setTextCursor(c);
+        }
+        if (m_tabWidget->count() > 1)
+            m_tabWidget->setCurrentIndex((i % 2) == 0 ? 0 : m_tabWidget->count() - 1);
+        QApplication::processEvents();
+        if (i % 3 == 0 && m_tabs.size() > 1)
+            closeTab(m_tabWidget->currentIndex());
+        QApplication::processEvents();
+    }
+    while (!m_tabs.isEmpty()) {
+        removeTabDirect(m_tabs.last());
+        QApplication::processEvents();
+    }
+    // End with multiple tabs: the window destruction that follows right after
+    // this returns must tear down several tabs without crashing.
+    addTab(QString());
+    addTab(QString());
+    addTab(QString());
+    QApplication::processEvents();
+    qInfo("STRESS OK (%d cycles, %d tab ops)", cycles, cycles * 2);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
