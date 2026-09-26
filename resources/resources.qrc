@@ -1,0 +1,14 @@
+<RCC>
+    <qresource prefix="/">
+        <file>appicon.png</file>
+        <file>fonts/FiraSans-Regular.ttf</file>
+        <file>fonts/FiraSans-Italic.ttf</file>
+        <file>fonts/FiraSans-Medium.ttf</file>
+        <file>fonts/FiraSans-SemiBold.ttf</file>
+        <file>fonts/FiraSans-Bold.ttf</file>
+        <file>fonts/JetBrainsMono-Regular.ttf</file>
+        <file>fonts/JetBrainsMono-Italic.ttf</file>
+        <file>fonts/JetBrainsMono-Bold.ttf</file>
+        <file>fonts/JetBrainsMono-BoldItalic.ttf</file>
+    </qresource>
+</RCC>
