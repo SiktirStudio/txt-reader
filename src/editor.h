@@ -2,11 +2,14 @@
 
 #include <QList>
 #include <QPlainTextEdit>
+#include <QString>
 #include <QTextCursor>
 
 #include "themes.h"
 
 class Editor;
+class QKeyEvent;
+class QMouseEvent;
 
 // Tiny gutter widget that asks its parent Editor to paint the line numbers.
 class LineNumberArea : public QWidget
@@ -17,6 +20,7 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
 
 private:
     Editor *m_editor;
@@ -31,6 +35,12 @@ public:
     void setPalette(const EditorPalette &palette);
     EditorPalette palette() const { return m_palette; }
 
+    static int smartHomeTarget(const QString &line, int column);
+    static int findMatchingBracket(const QString &text, int position, int scanLimit = 20000);
+
+    void setAutoCloseBrackets(bool on) { m_autoCloseBrackets = on; }
+    bool autoCloseBrackets() const { return m_autoCloseBrackets; }
+
     void setCustomFont(const QFont &font, int baseSize);
     QFont customFont() const { return m_font; }
     int fontSize() const { return m_font.pointSize(); }
@@ -40,6 +50,7 @@ public:
 
     void setShowLineNumbers(bool on);
     bool showLineNumbers() const { return m_showLineNumbers; }
+    void selectLineAtY(int y);
 
     // Extra selections managed by MainWindow (search highlights, word matches)
     void setSearchSelections(const QList<QTextEdit::ExtraSelection> &selections);
@@ -72,10 +83,12 @@ private slots:
     void updateLineNumberAreaWidth(int newBlockCount);
     void highlightCurrentLine();
     void updateLineNumberArea(const QRect &rect, int dy);
+    void updateBracketMatch();
 
 private:
     void refreshExtraSelections();
     void indentSelection(bool dedent);
+    bool handleTypingKey(QKeyEvent *event);
 
     LineNumberArea *m_lineArea = nullptr;
     EditorPalette m_palette;
@@ -83,9 +96,11 @@ private:
     int m_baseFontSize = 11;
     bool m_showLineNumbers = true;
     bool m_highlightCurrentLine = true;
+    bool m_autoCloseBrackets = true;
     QString m_eolLabel;
 
     QList<QTextEdit::ExtraSelection> m_currentLine;
+    QList<QTextEdit::ExtraSelection> m_bracketSelections;
     QList<QTextEdit::ExtraSelection> m_searchSelections;
     QList<QTextEdit::ExtraSelection> m_wordSelections;
 };

@@ -162,13 +162,19 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    for (TabData *t : m_tabs) {
+    const QList<TabData *> tabs = m_tabs;
+    for (TabData *t : tabs) {
+        t->editor->document()->disconnect(this);
+        t->editor->disconnect(this);
+    }
+    m_tabs.clear();
+
+    for (TabData *t : tabs) {
         delete t->highlighter;
         t->highlighter = nullptr;
         delete t->editor;
         delete t;
     }
-    m_tabs.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -424,6 +430,26 @@ void MainWindow::setupMenus()
     connect(m_actStatusbar, &QAction::toggled, this, &MainWindow::onStatusbarToggled);
 
     viewMenu->addSeparator();
+    m_actFullScreen = viewMenu->addAction(tr("&Full Screen"));
+    m_actFullScreen->setCheckable(true);
+    m_actFullScreen->setShortcut(QKeySequence(Qt::Key_F11));
+    connect(m_actFullScreen, &QAction::toggled, this, [this](bool on) {
+        if (on)
+            showFullScreen();
+        else
+            showNormal();
+    });
+    connect(viewMenu, &QMenu::aboutToShow, this, [this]() {
+        if (m_actFullScreen->isChecked() != isFullScreen())
+            m_actFullScreen->setChecked(isFullScreen());
+    });
+
+    m_actAutoClose = viewMenu->addAction(tr("Auto-close Brackets && Quotes"));
+    m_actAutoClose->setCheckable(true);
+    m_actAutoClose->setChecked(true);
+    connect(m_actAutoClose, &QAction::toggled, this, &MainWindow::onAutoCloseToggled);
+
+    viewMenu->addSeparator();
     m_menuTheme = viewMenu->addMenu(tr("&Theme"));
     auto *themeGroup = new QActionGroup(this);
     QAction *themeDark = m_menuTheme->addAction(QStringLiteral("Nova Dark"));
@@ -573,6 +599,7 @@ MainWindow::TabData *MainWindow::addTab(const QString &filePath)
                                      ? QPlainTextEdit::WidgetWidth
                                      : QPlainTextEdit::NoWrap);
     tab->editor->setShowLineNumbers(m_actLineNumbers && m_actLineNumbers->isChecked());
+    tab->editor->setAutoCloseBrackets(m_actAutoClose && m_actAutoClose->isChecked());
 
     tab->highlighter = new SyntaxHighlighter(tab->editor->document());
     tab->highlighter->setColors(m_theme.syntax);
@@ -586,20 +613,23 @@ MainWindow::TabData *MainWindow::addTab(const QString &filePath)
         tab->encodingLabel = QStringLiteral("UTF-8");
     }
 
-    connect(tab->editor->document(), &QTextDocument::modificationChanged, this,
-            [this, tab](bool) {
-                if (m_tabs.contains(tab))
-                    updateTabTitle(*tab);
+    // Capture the Editor pointer, not TabData: tabs are freed before deferred
+    // editor deletion during normal close, and their signals must stay safe.
+    Editor *editor = tab->editor;
+    connect(editor->document(), &QTextDocument::modificationChanged, this,
+            [this, editor](bool) {
+                if (TabData *current = tabForWidget(editor))
+                    updateTabTitle(*current);
                 updateWindowTitle();
             });
-    connect(tab->editor, &QPlainTextEdit::cursorPositionChanged, this, [this, tab]() {
-        if (m_tabWidget->currentWidget() == tab->editor) {
+    connect(editor, &QPlainTextEdit::cursorPositionChanged, this, [this, editor]() {
+        if (m_tabWidget->currentWidget() == editor) {
             updateStatusBar();
             updateWordHighlights();
         }
     });
-    connect(tab->editor, &QPlainTextEdit::textChanged, this, [this, tab]() {
-        if (m_tabWidget->currentWidget() == tab->editor) {
+    connect(editor, &QPlainTextEdit::textChanged, this, [this, editor]() {
+        if (m_tabWidget->currentWidget() == editor) {
             updateStatusBar();
             if (m_findPanel->isVisible())
                 updateSearchHighlights();
@@ -618,6 +648,8 @@ void MainWindow::removeTabDirect(TabData *tab)
     if (!tab)
         return;
     m_tabs.removeAll(tab);
+    tab->editor->document()->disconnect(this);
+    tab->editor->disconnect(this);
     if (!tab->filePath.isEmpty() && m_watcher->files().contains(tab->filePath))
         m_watcher->removePath(tab->filePath);
     const int index = m_tabWidget->indexOf(tab->editor);
@@ -1383,6 +1415,15 @@ void MainWindow::onStatusbarToggled(bool on)
     positionFindPanel();
 }
 
+void MainWindow::onAutoCloseToggled(bool on)
+{
+    for (TabData *t : m_tabs)
+        t->editor->setAutoCloseBrackets(on);
+
+    QSettings settings;
+    settings.setValue(QStringLiteral("ui/autoClose"), on);
+}
+
 void MainWindow::onThemeChanged(QAction *action)
 {
     applyTheme(action->data().toBool());
@@ -1587,6 +1628,9 @@ void MainWindow::readSettings()
     m_actStatusbar->setChecked(statusbar);
     onStatusbarToggled(statusbar);
 
+    const bool autoClose = settings.value(QStringLiteral("ui/autoClose"), true).toBool();
+    m_actAutoClose->setChecked(autoClose);
+
     const QString family = settings.value(QStringLiteral("ui/fontFamily"),
                                           QStringLiteral("JetBrains Mono")).toString();
     const int size = settings.value(QStringLiteral("ui/fontSize"), 11).toInt();
@@ -1617,6 +1661,7 @@ void MainWindow::writeSettings()
     settings.setValue(QStringLiteral("ui/wrap"), m_actWrap->isChecked());
     settings.setValue(QStringLiteral("ui/lineNumbers"), m_actLineNumbers->isChecked());
     settings.setValue(QStringLiteral("ui/statusbar"), m_actStatusbar->isChecked());
+    settings.setValue(QStringLiteral("ui/autoClose"), m_actAutoClose->isChecked());
     settings.setValue(QStringLiteral("ui/fontFamily"), m_editorFont.family());
     settings.setValue(QStringLiteral("ui/fontSize"), m_editorFontSize);
     settings.setValue(QStringLiteral("recent/files"), m_recentFiles);
@@ -1911,6 +1956,45 @@ bool MainWindow::takeScreenshots(const QString &dir, const QString &themeName)
 }
 
 // ---------------------------------------------------------------------------
+// Stress test (--stress): cycle through tabs, edits and deferred deletions.
+// ---------------------------------------------------------------------------
+
+bool MainWindow::stressTest()
+{
+    constexpr int cycles = 120;
+    for (int i = 0; i < cycles; ++i) {
+        TabData *tab = addTab(QString());
+        Editor *editor = tab->editor;
+        editor->setPlainText(QStringLiteral("cycle %1\nalpha beta\nfoo() { return 42; }\n").arg(i));
+        editor->document()->setModified(false);
+        editor->setFocus();
+        QTextCursor cursor(editor->document());
+        cursor.setPosition(3);
+        editor->setTextCursor(cursor);
+
+        if (m_tabWidget->count() > 1)
+            m_tabWidget->setCurrentIndex((i % 2) == 0 ? 0 : m_tabWidget->count() - 1);
+        QApplication::processEvents();
+        if (i % 3 == 0 && m_tabs.size() > 1)
+            closeTab(m_tabWidget->currentIndex());
+        QApplication::processEvents();
+    }
+
+    while (!m_tabs.isEmpty()) {
+        removeTabDirect(m_tabs.last());
+        QApplication::processEvents();
+    }
+
+    // Leave multiple tabs for the destructor to exercise the original crash.
+    addTab(QString());
+    addTab(QString());
+    addTab(QString());
+    QApplication::processEvents();
+    qInfo("STRESS OK (%d cycles)", cycles);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Self test (--selftest)
 // ---------------------------------------------------------------------------
 
@@ -2132,6 +2216,108 @@ int MainWindow::runSelfTest()
         e.trimTrailingWhitespace();
         CHECK(e.toPlainText() == QStringLiteral("keep\n\ttrim\n"),
               "Editor::trimTrailingWhitespace");
+    }
+
+    // ---- Typing assists ------------------------------------------------------
+    {
+        CHECK(Editor::smartHomeTarget(QStringLiteral("    code"), 0) == 4,
+              "Editor::smartHomeTarget from column 0");
+        CHECK(Editor::smartHomeTarget(QStringLiteral("    code"), 4) == 0,
+              "Editor::smartHomeTarget toggles from indentation");
+        CHECK(Editor::smartHomeTarget(QStringLiteral("    code"), 7) == 4,
+              "Editor::smartHomeTarget from inside text");
+        CHECK(Editor::smartHomeTarget(QStringLiteral("code"), 4) == 0,
+              "Editor::smartHomeTarget without indentation");
+    }
+    {
+        const QString sample = QStringLiteral("foo( bar[1] )");
+        const QString nested = QStringLiteral("{ a { b } c }");
+        CHECK(Editor::findMatchingBracket(sample, 3) == 12,
+              "Editor::findMatchingBracket forward parenthesis");
+        CHECK(Editor::findMatchingBracket(sample, 12) == 3,
+              "Editor::findMatchingBracket reverse parenthesis");
+        CHECK(Editor::findMatchingBracket(sample, 8) == 10,
+              "Editor::findMatchingBracket forward square bracket");
+        CHECK(Editor::findMatchingBracket(sample, 10) == 8,
+              "Editor::findMatchingBracket reverse square bracket");
+        CHECK(Editor::findMatchingBracket(nested, 0) == 12
+                  && Editor::findMatchingBracket(nested, 12) == 0,
+              "Editor::findMatchingBracket outer nested pair");
+        CHECK(Editor::findMatchingBracket(nested, 4) == 8
+                  && Editor::findMatchingBracket(nested, 8) == 4,
+              "Editor::findMatchingBracket inner nested pair");
+        CHECK(Editor::findMatchingBracket(QStringLiteral("((("), 0) == -1,
+              "Editor::findMatchingBracket unmatched opener");
+        CHECK(Editor::findMatchingBracket(QStringLiteral("not a bracket"), 2) == -1,
+              "Editor::findMatchingBracket rejects non-bracket");
+    }
+    {
+        auto sendKey = [](Editor &editor, int key, Qt::KeyboardModifiers modifiers,
+                          const QString &text = QString()) {
+            QKeyEvent event(QEvent::KeyPress, key, modifiers, text);
+            QApplication::sendEvent(&editor, &event);
+        };
+
+        Editor e;
+        e.setPlainText(QString());
+        sendKey(e, Qt::Key_ParenLeft, Qt::ShiftModifier, QStringLiteral("("));
+        CHECK(e.toPlainText() == QStringLiteral("()") && e.textCursor().position() == 1,
+              "Editor auto-pairs opener and keeps cursor inside");
+
+        sendKey(e, Qt::Key_ParenRight, Qt::ShiftModifier, QStringLiteral(")"));
+        CHECK(e.toPlainText() == QStringLiteral("()") && e.textCursor().position() == 2,
+              "Editor types over an existing closer");
+
+        e.setPlainText(QStringLiteral("()"));
+        QTextCursor pairCursor(e.document());
+        pairCursor.setPosition(1);
+        e.setTextCursor(pairCursor);
+        sendKey(e, Qt::Key_Backspace, Qt::NoModifier);
+        CHECK(e.toPlainText().isEmpty() && e.textCursor().position() == 0,
+              "Editor Backspace removes an empty pair");
+
+        e.setPlainText(QStringLiteral("abc"));
+        QTextCursor selection(e.document());
+        selection.setPosition(0);
+        selection.setPosition(3, QTextCursor::KeepAnchor);
+        e.setTextCursor(selection);
+        sendKey(e, Qt::Key_QuoteDbl, Qt::ShiftModifier, QStringLiteral("\""));
+        CHECK(e.toPlainText() == QStringLiteral("\"abc\"")
+                  && e.textCursor().hasSelection()
+                  && e.textCursor().selectedText() == QStringLiteral("abc"),
+              "Editor wraps selection in quotes and retains inner selection");
+
+        e.setPlainText(QStringLiteral("foo() {}"));
+        QTextCursor braceCursor(e.document());
+        braceCursor.setPosition(7);
+        e.setTextCursor(braceCursor);
+        sendKey(e, Qt::Key_Return, Qt::NoModifier, QStringLiteral("\r"));
+        CHECK(e.toPlainText() == QStringLiteral("foo() {\n  \n}")
+                  && e.textCursor().position() == 10,
+              "Editor Enter splits a brace pair with inner indentation");
+
+        e.setPlainText(QStringLiteral("hello world"));
+        QTextCursor wordCursor(e.document());
+        wordCursor.setPosition(11);
+        e.setTextCursor(wordCursor);
+        sendKey(e, Qt::Key_Backspace, Qt::ControlModifier);
+        CHECK(e.toPlainText() == QStringLiteral("hello ") && e.textCursor().position() == 6,
+              "Editor Ctrl+Backspace deletes the previous word");
+
+        e.setPlainText(QStringLiteral("    code"));
+        QTextCursor homeCursor(e.document());
+        homeCursor.setPosition(8);
+        e.setTextCursor(homeCursor);
+        sendKey(e, Qt::Key_Home, Qt::NoModifier);
+        const bool firstHome = e.textCursor().positionInBlock() == 4;
+        sendKey(e, Qt::Key_Home, Qt::NoModifier);
+        const bool secondHome = e.textCursor().positionInBlock() == 0;
+        homeCursor = e.textCursor();
+        homeCursor.setPosition(8);
+        e.setTextCursor(homeCursor);
+        sendKey(e, Qt::Key_Home, Qt::ShiftModifier);
+        CHECK(firstHome && secondHome && e.textCursor().selectedText() == QStringLiteral("code"),
+              "Editor smart Home toggles and supports Shift+Home");
     }
 
     // ---- Toggle comment -------------------------------------------------------

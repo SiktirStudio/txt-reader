@@ -5,8 +5,54 @@
 #include <QDropEvent>
 #include <QKeyEvent>
 #include <QMimeData>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QTextBlock>
+#include <QVector>
+
+namespace {
+
+QChar closingFor(QChar opening)
+{
+    if (opening == QLatin1Char('(')) return QLatin1Char(')');
+    if (opening == QLatin1Char('[')) return QLatin1Char(']');
+    if (opening == QLatin1Char('{')) return QLatin1Char('}');
+    if (opening == QLatin1Char('\"')) return QLatin1Char('\"');
+    if (opening == QLatin1Char('\'')) return QLatin1Char('\'');
+    return QChar();
+}
+
+QChar openingFor(QChar closing)
+{
+    if (closing == QLatin1Char(')')) return QLatin1Char('(');
+    if (closing == QLatin1Char(']')) return QLatin1Char('[');
+    if (closing == QLatin1Char('}')) return QLatin1Char('{');
+    if (closing == QLatin1Char('\"')) return QLatin1Char('\"');
+    if (closing == QLatin1Char('\'')) return QLatin1Char('\'');
+    return QChar();
+}
+
+bool isOpeningBracket(QChar ch)
+{
+    return ch == QLatin1Char('(') || ch == QLatin1Char('[') || ch == QLatin1Char('{');
+}
+
+bool isClosingBracket(QChar ch)
+{
+    return ch == QLatin1Char(')') || ch == QLatin1Char(']') || ch == QLatin1Char('}');
+}
+
+bool isPairedCloser(QChar ch)
+{
+    return isClosingBracket(ch) || ch == QLatin1Char('\"') || ch == QLatin1Char('\'');
+}
+
+bool isWordCharacter(QChar ch)
+{
+    return ch.isLetterOrNumber() || ch == QLatin1Char('_');
+}
+
+} // namespace
 
 LineNumberArea::LineNumberArea(Editor *editor)
     : QWidget(editor)
@@ -24,6 +70,16 @@ void LineNumberArea::paintEvent(QPaintEvent *event)
     m_editor->lineNumberAreaPaintEvent(event);
 }
 
+void LineNumberArea::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_editor->selectLineAtY(event->position().toPoint().y());
+        event->accept();
+        return;
+    }
+    QWidget::mousePressEvent(event);
+}
+
 Editor::Editor(QWidget *parent)
     : QPlainTextEdit(parent)
 {
@@ -37,9 +93,11 @@ Editor::Editor(QWidget *parent)
     connect(document(), &QTextDocument::blockCountChanged, this, &Editor::updateLineNumberAreaWidth);
     connect(this, &QPlainTextEdit::updateRequest, this, &Editor::updateLineNumberArea);
     connect(this, &QPlainTextEdit::cursorPositionChanged, this, &Editor::highlightCurrentLine);
+    connect(this, &QPlainTextEdit::cursorPositionChanged, this, &Editor::updateBracketMatch);
 
     updateLineNumberAreaWidth(0);
     highlightCurrentLine();
+    updateBracketMatch();
 }
 
 void Editor::setPalette(const EditorPalette &palette)
@@ -53,7 +111,60 @@ void Editor::setPalette(const EditorPalette &palette)
     viewport()->setPalette(p);
     QWidget::setPalette(p); // for consistency; viewport palette does the real work
     highlightCurrentLine();
+    updateBracketMatch();
     m_lineArea->update();
+}
+
+int Editor::smartHomeTarget(const QString &line, int column)
+{
+    const int col = qBound(0, column, line.size());
+    int first = 0;
+    while (first < line.size() && line.at(first).isSpace())
+        ++first;
+
+    if (col == 0)
+        return first;
+    if (col == first)
+        return 0;
+    return first;
+}
+
+int Editor::findMatchingBracket(const QString &text, int position, int scanLimit)
+{
+    if (position < 0 || position >= text.size() || scanLimit <= 0)
+        return -1;
+
+    const QChar target = text.at(position);
+    if (isOpeningBracket(target)) {
+        QVector<QChar> expectedClosers;
+        expectedClosers.append(closingFor(target));
+        int scanned = 0;
+        for (int i = position + 1; i < text.size() && scanned < scanLimit; ++i, ++scanned) {
+            const QChar ch = text.at(i);
+            if (isOpeningBracket(ch)) {
+                expectedClosers.append(closingFor(ch));
+            } else if (isClosingBracket(ch) && ch == expectedClosers.constLast()) {
+                expectedClosers.removeLast();
+                if (expectedClosers.isEmpty())
+                    return i;
+            }
+        }
+    } else if (isClosingBracket(target)) {
+        QVector<QChar> expectedOpeners;
+        expectedOpeners.append(openingFor(target));
+        int scanned = 0;
+        for (int i = position - 1; i >= 0 && scanned < scanLimit; --i, ++scanned) {
+            const QChar ch = text.at(i);
+            if (isClosingBracket(ch)) {
+                expectedOpeners.append(openingFor(ch));
+            } else if (isOpeningBracket(ch) && ch == expectedOpeners.constLast()) {
+                expectedOpeners.removeLast();
+                if (expectedOpeners.isEmpty())
+                    return i;
+            }
+        }
+    }
+    return -1;
 }
 
 void Editor::setCustomFont(const QFont &font, int baseSize)
@@ -93,6 +204,29 @@ void Editor::setShowLineNumbers(bool on)
     updateLineNumberAreaWidth(0);
 }
 
+void Editor::selectLineAtY(int y)
+{
+    QTextBlock block = firstVisibleBlock();
+    if (!block.isValid())
+        return;
+
+    int top = qRound(blockBoundingGeometry(block).translated(contentOffset()).top());
+    while (block.isValid()) {
+        const int height = qMax(1, qRound(blockBoundingRect(block).height()));
+        if (y >= top && y < top + height) {
+            QTextCursor cursor(block);
+            cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+            setTextCursor(cursor);
+            setFocus(Qt::MouseFocusReason);
+            return;
+        }
+        if (top > y)
+            return;
+        top += height;
+        block = block.next();
+    }
+}
+
 void Editor::setSearchSelections(const QList<QTextEdit::ExtraSelection> &selections)
 {
     m_searchSelections = selections;
@@ -108,7 +242,7 @@ void Editor::setWordSelections(const QList<QTextEdit::ExtraSelection> &selection
 void Editor::refreshExtraSelections()
 {
     QList<QTextEdit::ExtraSelection> all;
-    all << m_currentLine << m_wordSelections << m_searchSelections;
+    all << m_currentLine << m_wordSelections << m_searchSelections << m_bracketSelections;
     setExtraSelections(all);
 }
 
@@ -161,6 +295,46 @@ void Editor::highlightCurrentLine()
     refreshExtraSelections();
 }
 
+void Editor::updateBracketMatch()
+{
+    m_bracketSelections.clear();
+    const int documentEnd = document()->characterCount() - 1;
+    const int cursorPosition = textCursor().position();
+    int bracketPosition = -1;
+
+    auto isBracket = [](QChar ch) {
+        return isOpeningBracket(ch) || isClosingBracket(ch);
+    };
+    if (cursorPosition > 0 && isBracket(document()->characterAt(cursorPosition - 1)))
+        bracketPosition = cursorPosition - 1;
+    else if (cursorPosition < documentEnd && isBracket(document()->characterAt(cursorPosition)))
+        bracketPosition = cursorPosition;
+
+    if (bracketPosition >= 0) {
+        constexpr int scanLimit = 20000;
+        const int start = qMax(0, bracketPosition - scanLimit);
+        const int end = qMin(documentEnd, bracketPosition + scanLimit + 1);
+        QTextCursor range(document());
+        range.setPosition(start);
+        range.setPosition(end, QTextCursor::KeepAnchor);
+        const QString fragment = range.selectedText();
+        const int match = findMatchingBracket(fragment, bracketPosition - start, scanLimit);
+
+        auto addSelection = [this](int position) {
+            QTextEdit::ExtraSelection selection;
+            selection.format.setBackground(m_palette.braceMatch);
+            selection.cursor = QTextCursor(document());
+            selection.cursor.setPosition(position);
+            selection.cursor.setPosition(position + 1, QTextCursor::KeepAnchor);
+            m_bracketSelections.append(selection);
+        };
+        addSelection(bracketPosition);
+        if (match >= 0)
+            addSelection(start + match);
+    }
+    refreshExtraSelections();
+}
+
 void Editor::lineNumberAreaPaintEvent(QPaintEvent *event)
 {
     QPainter painter(m_lineArea);
@@ -197,10 +371,59 @@ void Editor::keyPressEvent(QKeyEvent *event)
 {
     const Qt::KeyboardModifiers mods = event->modifiers();
 
-    // Auto indent on Enter
+    // Home alternates between the first non-whitespace character and column 0.
+    if (event->key() == Qt::Key_Home
+        && (mods == Qt::NoModifier || mods == Qt::ShiftModifier)) {
+        QTextCursor cursor = textCursor();
+        const int target = smartHomeTarget(cursor.block().text(), cursor.positionInBlock());
+        cursor.setPosition(cursor.block().position() + target,
+                           mods == Qt::ShiftModifier ? QTextCursor::KeepAnchor
+                                                    : QTextCursor::MoveAnchor);
+        setTextCursor(cursor);
+        event->accept();
+        return;
+    }
+
+    // Ctrl+Backspace / Ctrl+Delete remove the previous / next word.
+    if (mods == Qt::ControlModifier
+        && (event->key() == Qt::Key_Backspace || event->key() == Qt::Key_Delete)) {
+        QTextCursor cursor = textCursor();
+        if (!cursor.hasSelection()) {
+            cursor.movePosition(event->key() == Qt::Key_Backspace ? QTextCursor::PreviousWord
+                                                                  : QTextCursor::NextWord,
+                                QTextCursor::KeepAnchor);
+        }
+        cursor.removeSelectedText();
+        setTextCursor(cursor);
+        event->accept();
+        return;
+    }
+
+    // Backspace removes an empty auto-inserted pair as one unit.
+    if (m_autoCloseBrackets && event->key() == Qt::Key_Backspace
+        && mods == Qt::NoModifier) {
+        QTextCursor cursor = textCursor();
+        const int position = cursor.position();
+        const int end = document()->characterCount() - 1;
+        if (!cursor.hasSelection() && position > 0 && position < end) {
+            const QChar before = document()->characterAt(position - 1);
+            const QChar after = document()->characterAt(position);
+            if (closingFor(before) == after) {
+                cursor.setPosition(position - 1);
+                cursor.setPosition(position + 1, QTextCursor::KeepAnchor);
+                cursor.removeSelectedText();
+                setTextCursor(cursor);
+                event->accept();
+                return;
+            }
+        }
+    }
+
+    // Auto indent on Enter, including a split block before an existing closer.
     if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
         && mods == Qt::NoModifier) {
-        const QString lineText = textCursor().block().text();
+        const QTextCursor current = textCursor();
+        const QString lineText = current.block().text();
         QString indent;
         for (const QChar ch : lineText) {
             if (ch == QLatin1Char(' ') || ch == QLatin1Char('\t'))
@@ -208,20 +431,29 @@ void Editor::keyPressEvent(QKeyEvent *event)
             else
                 break;
         }
-        // extra indent right after an opening brace
-        const int col = textCursor().positionInBlock();
-        if (col > 0 && col <= lineText.size()
-            && lineText.left(col).endsWith(QLatin1Char('{'))
-            && lineText.mid(col).trimmed().startsWith(QLatin1Char('}'))) {
-            insertPlainText(QStringLiteral("\n") + indent + QStringLiteral("  ") + lineText.mid(col).trimmed());
-            QTextCursor c = textCursor();
-            c.movePosition(QTextCursor::Left, QTextCursor::MoveAnchor, lineText.mid(col).trimmed().size());
-            setTextCursor(c);
-            return;
+        const int col = current.positionInBlock();
+        if (!current.hasSelection() && col > 0 && col <= lineText.size()
+            && lineText.left(col).endsWith(QLatin1Char('{'))) {
+            const QString rest = lineText.mid(col).trimmed();
+            if (rest.startsWith(QLatin1Char('}'))) {
+                const int blockPosition = current.block().position();
+                QTextCursor cursor = current;
+                cursor.beginEditBlock();
+                cursor.setPosition(blockPosition + col);
+                cursor.setPosition(blockPosition + lineText.size(), QTextCursor::KeepAnchor);
+                cursor.insertText(QStringLiteral("\n") + indent + QStringLiteral("  \n")
+                                  + indent + rest);
+                cursor.endEditBlock();
+                cursor.setPosition(blockPosition + col + 1 + indent.size() + 2);
+                setTextCursor(cursor);
+                event->accept();
+                return;
+            }
         }
         if (lineText.left(col).endsWith(QLatin1Char('{')))
             indent += QStringLiteral("  ");
         insertPlainText(QStringLiteral("\n") + indent);
+        event->accept();
         return;
     }
 
@@ -231,15 +463,78 @@ void Editor::keyPressEvent(QKeyEvent *event)
         const QTextCursor c = textCursor();
         if (c.hasSelection() && c.selectedText().contains(QChar(0x2029))) {
             indentSelection(mods == Qt::ShiftModifier);
+            event->accept();
             return;
         }
         if (mods == Qt::NoModifier) {
             insertPlainText(QStringLiteral("\t"));
+            event->accept();
             return;
         }
     }
 
+    if (handleTypingKey(event))
+        return;
+
     QPlainTextEdit::keyPressEvent(event);
+}
+
+bool Editor::handleTypingKey(QKeyEvent *event)
+{
+    if (!m_autoCloseBrackets)
+        return false;
+    if (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))
+        return false;
+
+    const QString text = event->text();
+    if (text.size() != 1)
+        return false;
+
+    const QChar typed = text.at(0);
+    QTextCursor cursor = textCursor();
+    const int position = cursor.position();
+    const int documentEnd = document()->characterCount() - 1;
+
+    // Type over an automatically inserted closing bracket or quote.
+    if (!cursor.hasSelection() && position < documentEnd
+        && isPairedCloser(typed) && typed == document()->characterAt(position)) {
+        cursor.movePosition(QTextCursor::Right);
+        setTextCursor(cursor);
+        event->accept();
+        return true;
+    }
+
+    const QChar closer = closingFor(typed);
+    if (closer.isNull())
+        return false;
+
+    const bool isQuote = typed == QLatin1Char('"') || typed == QLatin1Char('\'');
+    if (isQuote && !cursor.hasSelection()) {
+        const QChar before = position > 0 ? document()->characterAt(position - 1) : QChar();
+        const QChar after = position < documentEnd ? document()->characterAt(position) : QChar();
+        // Avoid inserting a closing quote in the middle of a word (for example, don't).
+        if (isWordCharacter(before) && isWordCharacter(after))
+            return false;
+    }
+
+    cursor.beginEditBlock();
+    if (cursor.hasSelection()) {
+        const int selectionStart = cursor.selectionStart();
+        const int selectionEnd = cursor.selectionEnd();
+        cursor.setPosition(selectionEnd);
+        cursor.insertText(QString(closer));
+        cursor.setPosition(selectionStart);
+        cursor.insertText(QString(typed));
+        cursor.setPosition(selectionStart + 1);
+        cursor.setPosition(selectionEnd + 1, QTextCursor::KeepAnchor);
+    } else {
+        cursor.insertText(QString(typed) + closer);
+        cursor.movePosition(QTextCursor::Left);
+    }
+    cursor.endEditBlock();
+    setTextCursor(cursor);
+    event->accept();
+    return true;
 }
 
 void Editor::wheelEvent(QWheelEvent *event)

@@ -31,6 +31,7 @@ struct EditorPalette {
     QColor searchHighlight;   // all search matches
     QColor searchCurrent;     // the active search match
     QColor wordHighlight;     // occurrences of the word under the cursor
+    QColor braceMatch;        // matching bracket pair under the cursor
 };
 
 struct Theme {

@@ -33,6 +33,7 @@ public:
     // Developer helpers used by CI / --screenshot and --selftest
     static int runSelfTest();
     bool takeScreenshots(const QString &dir, const QString &themeName);
+    bool stressTest();
     void loadDemoContent();
 
 protected:
@@ -79,6 +80,7 @@ private slots:
     void onWordWrapToggled(bool on);
     void onLineNumbersToggled(bool on);
     void onStatusbarToggled(bool on);
+    void onAutoCloseToggled(bool on);
     void onThemeChanged(QAction *action);
     void onEolChanged(QAction *action);
     void onEncodingChanged(QAction *action);
@@ -163,6 +165,8 @@ private:
     QAction *m_actWrap = nullptr;
     QAction *m_actLineNumbers = nullptr;
     QAction *m_actStatusbar = nullptr;
+    QAction *m_actAutoClose = nullptr;
+    QAction *m_actFullScreen = nullptr;
 
     QList<TabData *> m_tabs;
     QList<ToolIcon> m_toolIcons;
