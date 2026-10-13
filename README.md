@@ -38,14 +38,14 @@ NovaPad takes everything you know from **Windows Notepad** — and everything yo
 - **File**: New, New Window, Open, Save, Save As, Page Setup, Print Preview, Print
 - **Edit**: Undo/Redo, Cut/Copy/Paste/Delete, Find (F3 / Shift+F3), Replace, Go To Line, Select All, Time/Date (F5)
 - **Format**: Word Wrap, Font… (live font picker for the whole editor)
-- **View**: Zoom In / Out / Reset (Ctrl+mouse wheel too), Status Bar toggle
+- **View**: Zoom In / Out / Reset (Ctrl+mouse wheel too), Full Screen (`F11`), Status Bar toggle, persistent auto-close Brackets & Quotes setting
 - UTF-8 by default, BOM detection & preservation, automatic fallback for non-UTF-8 (ANSI) files
 
 ### …plus the Notepad++ extras
 - 🗂️ **Tabs** — movable, closable (✕ or middle-click), drag files onto the window to open them, double-click empty tab bar for a new tab, right-click tab menu (copy path, reveal in file manager…)
 - 🌈 **Syntax highlighting for 13 languages** — C/C++, C#, Java, JavaScript/TypeScript, Python, JSON, HTML/XML, CSS, INI/TOML, Shell, CMake, Go, Rust — plus Plain Text; switch language per-tab from the **Language** menu
 - 🔍 **Find & Replace panel** — match case, whole word, **regular expressions** with back-references (`\1`, `$1`), live match highlighting, `n of m` counter, Replace All as a single undo step
-- #️⃣ **Editor niceties** — line numbers, current-line highlight, occurrences of the selected word, auto-indent, smart brace handling, Tab / Shift+Tab block indent, move/duplicate/delete line, toggle comment, trim trailing whitespace, UPPER/lower/Title/iNVERT case
+- #️⃣ **Editor niceties** — line numbers (click a number to select its line), current-line and matching-bracket highlights, auto-indent, smart Home, Ctrl+Backspace/Delete word deletion, configurable bracket/quote pairing (type-over, pair deletion, selection wrapping), brace-aware Enter, Tab / Shift+Tab block indent, move/duplicate/delete line, toggle comment, trim trailing whitespace, UPPER/lower/Title/iNVERT case
 - 🧭 **Go To Line** dialog, **Document Statistics** (lines / words / chars)
 - 📁 **Recent files**, **session restore** (reopens your tabs on launch), **auto-reload** when a file changes on disk
 - 🌗 **Two polished themes** — Nova Dark (VS Code Dark+ palette) and Nova Light, switchable instantly
@@ -55,7 +55,7 @@ NovaPad takes everything you know from **Windows Notepad** — and everything yo
 ### Under the hood
 - Pure **C++17 / Qt Widgets** — no QML, no web engine, tiny memory footprint
 - **Fonts embedded in the executable** (JetBrains Mono + Fira Sans, both SIL OFL) — identical look on every machine
-- Ships with a built-in **self-test suite** (`novapad --selftest`, 36 checks) that CI runs on every build
+- Ships with a built-in **self-test suite** (`novapad --selftest`, 55 checks), a tab-lifecycle stress test (`novapad --stress`), and version output (`novapad --version` / `-v`); CI runs the tests on Linux
 
 ## ⌨️ Keyboard shortcuts
 
@@ -71,6 +71,8 @@ NovaPad takes everything you know from **Windows Notepad** — and everything yo
 | `Alt+↑` / `Alt+↓` | Move line up/down | `Ctrl+/` | Toggle comment |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | Zoom in/out/reset | `Ctrl+Shift+U/L` | UPPERCASE / lowercase |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo | `Esc` | Close find panel |
+| `Home` / `Shift+Home` | Smart line start / select to smart start | `Ctrl+Backspace` / `Ctrl+Delete` | Delete previous / next word |
+| `F11` | Toggle full screen | `Ctrl+mouse wheel` | Zoom in / out |
 
 ## 📦 Download
 
@@ -140,11 +142,14 @@ The bundled fonts ([JetBrains Mono](resources/fonts/LICENSE-JetBrainsMono.txt), 
 - **تب‌ها** مثل Notepad++: جابه‌جایی، بستن با کلیک وسط، کشیدن و رها کردن فایل روی پنجره
 - **رنگ‌بندی کد برای ۱۳ زبان** برنامه‌نویسی شامل ++C، پایتون، جاوااسکریپت، HTML، CSS، Go، Rust و…
 - **جستجو و جایگزینی پیشرفته** با پشتیبانی از Regex و هایلایت زندهٔ نتایج
-- شمارهٔ خطوط، هایلایت خط جاری، تورفتگی هوشمند، جابه‌جایی/تکثیر/حذف خط، کامنت‌کردن خودکار
+- شمارهٔ خطوط با انتخاب خط از روی شماره، هایلایت خط جاری و براکت‌های متناظر، تورفتگی هوشمند و Home هوشمند
+- بستن خودکار پرانتز/براکت/آکولاد و نقل‌قول، تایپ‌روی براکت پایانی، حذف یک‌جای جفت خالی، پوشاندن متن انتخاب‌شده و Enter هوشمند بعد از آکولاد
+- حذف واژه با Ctrl+Backspace و Ctrl+Delete، جابه‌جایی/تکثیر/حذف خط، کامنت‌کردن خودکار و حالت تمام‌صفحه با F11
 - **دو تم زیبا**: تیره (الهام‌گرفته از VS Code) و روشن
 - بازگشت خودکار فایل‌های باز (Session) و بارگذاری مجدد خودکار هنگام تغییر فایل
 - نمایش Encoding و نوع پایان خط (CRLF/LF) و تبدیل آن‌ها
 - فونت‌ها داخل خود برنامه تعبیه شده‌اند و در همهٔ سیستم‌ها یکسان نمایش داده می‌شوند
+- خودآزمایی داخلی با ۵۵ بررسی (`novapad --selftest`)، آزمون تنش تب‌ها (`novapad --stress`) و نمایش نسخه با `novapad --version`
 
 ### اجرا و ساخت
 از بخش [Releases](https://github.com/SiktirStudio/txt-reader/releases) نسخهٔ آمادهٔ ویندوز، لینوکس یا مک را دانلود کنید، یا از سورس بسازید:

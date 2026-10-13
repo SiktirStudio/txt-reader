@@ -52,6 +52,7 @@ Theme dark()
     t.editor.searchHighlight       = QColor(0x3f, 0x45, 0x50);
     t.editor.searchCurrent         = QColor(0x8f, 0x62, 0x0f);
     t.editor.wordHighlight         = QColor(0x32, 0x38, 0x43);
+    t.editor.braceMatch             = QColor(0x3b, 0x4b, 0x66);
 
     t.syntax.keyword      = QColor(0x56, 0x9c, 0xd6);
     t.syntax.control      = QColor(0xc5, 0x86, 0xc0);
@@ -106,6 +107,7 @@ Theme light()
     t.editor.searchHighlight       = QColor(0xfe, 0xf3, 0xc8);
     t.editor.searchCurrent         = QColor(0xfd, 0xd8, 0x7a);
     t.editor.wordHighlight         = QColor(0xed, 0xef, 0xf4);
+    t.editor.braceMatch             = QColor(0xbf, 0xd3, 0xf2);
 
     t.syntax.keyword      = QColor(0x00, 0x00, 0xff);
     t.syntax.control      = QColor(0xaf, 0x00, 0xdb);

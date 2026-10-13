@@ -4,6 +4,7 @@
 #include <QIcon>
 #include <QSettings>
 #include <QStyleFactory>
+#include <cstdio>
 
 #include "mainwindow.h"
 
@@ -30,6 +31,14 @@ static void loadEmbeddedFonts()
 
 int main(int argc, char *argv[])
 {
+    for (int i = 1; i < argc; ++i) {
+        const QString arg = QString::fromLocal8Bit(argv[i]);
+        if (arg == QStringLiteral("--version") || arg == QStringLiteral("-v")) {
+            std::printf("NovaPad %s (Qt %s)\n", NOVAPAD_VERSION, qVersion());
+            return 0;
+        }
+    }
+
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("NovaPad"));
     QApplication::setOrganizationName(QStringLiteral("SiktirStudio"));
@@ -48,6 +57,10 @@ int main(int argc, char *argv[])
     // Developer / CI helpers -------------------------------------------------
     if (args.removeOne(QStringLiteral("--selftest")))
         return MainWindow::runSelfTest();
+    if (args.removeOne(QStringLiteral("--stress"))) {
+        MainWindow stressWindow(nullptr);
+        return stressWindow.stressTest() ? 0 : 1;
+    }
 
     QString shotDir;
     const int shotIdx = args.indexOf(QStringLiteral("--screenshot"));
