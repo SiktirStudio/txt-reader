@@ -44,12 +44,12 @@ jobs:
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: python .github/scripts/run-checked.py cmake --build build --config Release --parallel
 
       - name: Self-test, stress, TLS and version (all platforms)
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build -C Release --output-on-failure --timeout 120
+        run: python .github/scripts/run-checked.py ctest --test-dir build -C Release --output-on-failure --timeout 120
 
       - name: Screenshots (Linux)
         if: runner.os == 'Linux'
@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then VER="$GITHUB_REF_NAME"; else VER="dev"; fi
-          bash .github/scripts/package-linux.sh "$VER"
+          python .github/scripts/run-checked.py bash .github/scripts/package-linux.sh "$VER"
 
       - name: Package and smoke-test (Windows)
         if: runner.os == 'Windows'
