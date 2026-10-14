@@ -35,7 +35,8 @@
 - AI is text-only, single-turn and non-streaming; suggested model IDs must be
   available to your account. Live provider calls are not part of automated tests.
 - Offscreen checks do not replace real desktop or clean-machine GUI verification.
-- Windows/macOS builds are unsigned/unnotarized. Linux targets Ubuntu 24.04 or
+- Windows builds are unsigned; macOS bundles are ad-hoc signed only, not Developer
+  ID signed or notarized. Linux targets Ubuntu 24.04 or
   compatible newer systems and still needs system desktop libraries and CA roots.
 
 ## فارسی
@@ -68,5 +69,5 @@
 - AI فعلاً متنی، تک‌مرحله‌ای و بدون streaming است؛ اعتبار مدل به حساب کاربر
   بستگی دارد. API پولی واقعی در آزمون خودکار فراخوانی نمی‌شود.
 - آزمون offscreen جای بررسی دسکتاپ واقعی یا سیستم پاک را نمی‌گیرد.
-- بسته‌های ویندوز و مک امضاشده/notarized نیستند. لینوکس برای Ubuntu 24.04 یا
+- ویندوز امضاشده نیست؛ مک فقط امضای ad-hoc دارد و Developer ID/notarization ندارد. لینوکس برای Ubuntu 24.04 یا
   سیستم سازگار جدیدتر است و به کتابخانه‌های دسکتاپ و گواهی‌های ریشهٔ سیستم نیاز دارد.

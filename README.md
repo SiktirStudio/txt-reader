@@ -99,8 +99,8 @@ Grab a ready-made build from the [**Releases**](https://github.com/SiktirStudio/
 
 Linux packages include a launcher (`./novapad`), Qt Network, TLS plugins and
 OpenSSL 3; they target Ubuntu 24.04 or compatible newer distributions. System
-desktop libraries and CA certificates are still required. Windows/macOS builds
-are unsigned/unnotarized and may show OS security warnings.
+desktop libraries and CA certificates are still required. Windows builds are unsigned and macOS builds are only ad-hoc signed,
+not Developer ID signed or notarized and may show OS security warnings.
 
 ## 🔨 Build from source
 

@@ -61,7 +61,8 @@ Before distributing widely, verify on each target desktop:
 6. Inspect the new white-background icon at small and large sizes. On macOS,
    check the application bundle icon as well as the running application's icon.
 7. Test extracted packages on machines without a development Qt installation.
-   Windows/macOS downloads are unsigned/unnotarized; OS warnings are expected.
+   Windows downloads are unsigned; macOS bundles are ad-hoc signed only, not
+   Developer ID signed or notarized. OS warnings are expected.
 
 Real desktop checks, live-provider interoperability, signing/notarization and
 clean-machine GUI tests are not automated in this repository. Do not describe

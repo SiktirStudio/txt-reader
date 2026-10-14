@@ -21,7 +21,7 @@ def main():
     code = process.wait()
     if code and os.environ.get("GITHUB_ACTIONS"):
         failures = [line for line in recent if any(word in line.lower()
-                    for word in ("error", "[fail]", "failed", "not found", "fatal"))]
+                    for word in ("error", "[fail]", "failed", "not found", "fatal", "could not", "cannot load", "reason:"))]
         for line in (failures or list(recent)[-20:])[:50]:
             print("::error::" + escape(line[:4000]), flush=True)
     return code

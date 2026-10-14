@@ -100,18 +100,8 @@ jobs:
       - name: Package and smoke-test (macOS)
         if: runner.os == 'macOS'
         run: |
-          set -euo pipefail
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then VER="$GITHUB_REF_NAME"; else VER="dev"; fi
-          mkdir -p build/bin/novapad.app/Contents/Resources/licenses
-          cp LICENSE THIRD_PARTY.md build/bin/novapad.app/Contents/Resources/
-          cp resources/licenses/* resources/fonts/LICENSE-*.txt build/bin/novapad.app/Contents/Resources/licenses/
-          macdeployqt build/bin/novapad.app -dmg
-          test -d build/bin/novapad.app/Contents/PlugIns/tls
-          for TEST in --tls-check --selftest --stress; do
-            env -u QT_PLUGIN_PATH -u QT_QPA_PLATFORM_PLUGIN_PATH QT_QPA_PLATFORM=offscreen \
-              ./build/bin/novapad.app/Contents/MacOS/novapad "$TEST"
-          done
-          mv build/bin/novapad.dmg "NovaPad-$VER-macOS-arm64.dmg"
+          python .github/scripts/run-checked.py bash .github/scripts/package-macos.sh "$VER"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
