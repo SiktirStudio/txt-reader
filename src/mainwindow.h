@@ -6,6 +6,8 @@
 
 #include "themes.h"
 
+class AiPanel;
+class QDockWidget;
 class Editor;
 class FindPanel;
 class QLabel;
@@ -37,6 +39,7 @@ public:
     void loadDemoContent();
 
 protected:
+    void changeEvent(QEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void showEvent(QShowEvent *event) override;
@@ -79,6 +82,7 @@ private slots:
     void onZoomReset();
     void onWordWrapToggled(bool on);
     void onLineNumbersToggled(bool on);
+    void onIndentationGuidesToggled(bool on);
     void onStatusbarToggled(bool on);
     void onAutoCloseToggled(bool on);
     void onThemeChanged(QAction *action);
@@ -145,6 +149,8 @@ private:
     QToolBar *m_toolbar = nullptr;
     QToolButton *m_btnNewTab = nullptr;
     FindPanel *m_findPanel = nullptr;
+    QDockWidget *m_aiDock = nullptr;
+    AiPanel *m_aiPanel = nullptr;
     QFileSystemWatcher *m_watcher = nullptr;
     QLabel *m_lblPos = nullptr;
     QLabel *m_lblSel = nullptr;
@@ -164,6 +170,7 @@ private:
     QAction *m_actSave = nullptr;
     QAction *m_actWrap = nullptr;
     QAction *m_actLineNumbers = nullptr;
+    QAction *m_actIndentationGuides = nullptr;
     QAction *m_actStatusbar = nullptr;
     QAction *m_actAutoClose = nullptr;
     QAction *m_actFullScreen = nullptr;
@@ -180,4 +187,5 @@ private:
     int m_untitledCounter = 0;
     QString m_iconDir;
     bool m_restoring = false;
+    Qt::WindowStates m_stateBeforeFullScreen = Qt::WindowNoState;
 };

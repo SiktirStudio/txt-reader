@@ -53,6 +53,7 @@ Theme dark()
     t.editor.searchCurrent         = QColor(0x8f, 0x62, 0x0f);
     t.editor.wordHighlight         = QColor(0x32, 0x38, 0x43);
     t.editor.braceMatch             = QColor(0x3b, 0x4b, 0x66);
+    t.editor.indentGuide            = QColor(0x4a, 0x50, 0x5d);
 
     t.syntax.keyword      = QColor(0x56, 0x9c, 0xd6);
     t.syntax.control      = QColor(0xc5, 0x86, 0xc0);
@@ -108,6 +109,7 @@ Theme light()
     t.editor.searchCurrent         = QColor(0xfd, 0xd8, 0x7a);
     t.editor.wordHighlight         = QColor(0xed, 0xef, 0xf4);
     t.editor.braceMatch             = QColor(0xbf, 0xd3, 0xf2);
+    t.editor.indentGuide            = QColor(0xcc, 0xd0, 0xd8);
 
     t.syntax.keyword      = QColor(0x00, 0x00, 0xff);
     t.syntax.control      = QColor(0xaf, 0x00, 0xdb);
@@ -132,6 +134,10 @@ QString Theme::styleSheet(const QString &iconDir) const
 * { outline: none; }
 
 QMainWindow { background: %WINDOW%; }
+QDockWidget { color: %TEXT%; background: %WINDOW%; }
+QDockWidget::title { background: %BASE%; padding: 7px; }
+QWidget#aiPanel { background: %WINDOW%; }
+QWidget#aiPanel QLabel { color: %TEXT%; }
 QMainWindow::separator { background: %BORDER%; width: 2px; height: 2px; }
 
 QDialog, QMessageBox { background: %WINDOW%; }

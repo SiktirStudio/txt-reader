@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(NovaPad
-    VERSION 1.0.0
+    VERSION 1.1.0
     DESCRIPTION "A modern Notepad / Notepad++ style text editor built with C++ and Qt"
     LANGUAGES CXX)
 
@@ -16,10 +16,16 @@ foreach(cfg DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${cfg} ${CMAKE_BINARY_DIR}/bin)
 endforeach()
 
-find_package(Qt6 6.4 COMPONENTS Widgets PrintSupport REQUIRED)
+find_package(Qt6 6.4 COMPONENTS Widgets PrintSupport Network REQUIRED)
 
 add_executable(novapad WIN32 MACOSX_BUNDLE
     src/main.cpp
+    src/ai.h
+    src/ai.cpp
+    src/aipanel.h
+    src/aipanel.cpp
+    src/aitests.h
+    src/aitests.cpp
     src/mainwindow.h
     src/mainwindow.cpp
     src/editor.h
@@ -48,6 +54,7 @@ endif()
 target_link_libraries(novapad PRIVATE
     Qt6::Widgets
     Qt6::PrintSupport
+    Qt6::Network
 )
 
 target_compile_definitions(novapad PRIVATE
@@ -55,7 +62,10 @@ target_compile_definitions(novapad PRIVATE
 )
 
 if(APPLE)
+    target_sources(novapad PRIVATE resources/appicon.icns)
+    set_source_files_properties(resources/appicon.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
     set_target_properties(novapad PROPERTIES
+        MACOSX_BUNDLE_ICON_FILE "appicon.icns"
         MACOSX_BUNDLE_BUNDLE_NAME "NovaPad"
         MACOSX_BUNDLE_GUI_IDENTIFIER "io.siktir.novapad"
         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
@@ -67,3 +77,13 @@ install(TARGETS novapad
     BUNDLE DESTINATION .
     RUNTIME DESTINATION .
 )
+
+include(CTest)
+if(BUILD_TESTING)
+    add_test(NAME selftest COMMAND $<TARGET_FILE:novapad> --selftest)
+    add_test(NAME stress COMMAND $<TARGET_FILE:novapad> --stress)
+    add_test(NAME tls COMMAND $<TARGET_FILE:novapad> --tls-check)
+    add_test(NAME version COMMAND $<TARGET_FILE:novapad> --version)
+    set_tests_properties(selftest stress tls PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 120)
+    set_tests_properties(version PROPERTIES PASS_REGULAR_EXPRESSION "NovaPad ${PROJECT_VERSION}")
+endif()
