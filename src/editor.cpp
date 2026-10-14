@@ -90,7 +90,7 @@ Editor::Editor(QWidget *parent)
     setFrameShape(QFrame::NoFrame);
     setCursorWidth(2);
     setCenterOnScroll(false);
-    setTabStopDistance(QFontMetricsF(font()).horizontalAdvance(QLatin1Char(' ')) * 4);
+    setTabStopDistance(QFontMetricsF(this->font()).horizontalAdvance(QLatin1Char(' ')) * 4);
 
     m_lineArea = new LineNumberArea(this);
 
@@ -147,7 +147,7 @@ void Editor::paintEvent(QPaintEvent *event)
     QPainter painter(viewport());
     painter.setClipRect(event->rect());
     painter.setPen(QPen(m_palette.indentGuide, 1, Qt::DotLine));
-    const qreal space = QFontMetricsF(font()).horizontalAdvance(QLatin1Char(' '));
+    const qreal space = QFontMetricsF(this->font()).horizontalAdvance(QLatin1Char(' '));
     if (space <= 0)
         return;
     for (QTextBlock block = firstVisibleBlock(); block.isValid(); block = block.next()) {
@@ -233,7 +233,7 @@ void Editor::setCustomFont(const QFont &font, int baseSize)
     if (m_font.pointSize() <= 0)
         m_font.setPointSize(baseSize);
     QPlainTextEdit::setFont(m_font);
-    setTabStopDistance(QFontMetricsF(font()).horizontalAdvance(QLatin1Char(' ')) * 4);
+    setTabStopDistance(QFontMetricsF(this->font()).horizontalAdvance(QLatin1Char(' ')) * 4);
     updateLineNumberAreaWidth(0);
     emit fontSizeChanged(m_font.pointSize());
 }
@@ -246,7 +246,7 @@ void Editor::zoomStep(int delta)
         return;
     m_font.setPointSize(size);
     QPlainTextEdit::setFont(m_font);
-    setTabStopDistance(QFontMetricsF(font()).horizontalAdvance(QLatin1Char(' ')) * 4);
+    setTabStopDistance(QFontMetricsF(this->font()).horizontalAdvance(QLatin1Char(' ')) * 4);
     updateLineNumberAreaWidth(0);
     emit fontSizeChanged(size);
 }
@@ -255,7 +255,7 @@ void Editor::resetZoom()
 {
     m_font.setPointSize(m_baseFontSize);
     QPlainTextEdit::setFont(m_font);
-    setTabStopDistance(QFontMetricsF(font()).horizontalAdvance(QLatin1Char(' ')) * 4);
+    setTabStopDistance(QFontMetricsF(this->font()).horizontalAdvance(QLatin1Char(' ')) * 4);
     updateLineNumberAreaWidth(0);
     emit fontSizeChanged(m_baseFontSize);
 }
