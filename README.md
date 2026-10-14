@@ -4,7 +4,7 @@
 
 **A modern, Notepad / Notepad++ style text editor — built from scratch in C++17 with Qt.**
 
-Fast. Tabbed. Dark. Bundled fonts. Zero dependencies at runtime.
+Fast. Tabbed. Dark. Bundled fonts and Qt runtime. Optional AI assistance.
 
 [![Build](https://github.com/SiktirStudio/txt-reader/actions/workflows/build.yml/badge.svg)](https://github.com/SiktirStudio/txt-reader/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/SiktirStudio/txt-reader?color=%234d9ef7)](https://github.com/SiktirStudio/txt-reader/releases)
@@ -32,13 +32,23 @@ NovaPad takes everything you know from **Windows Notepad** — and everything yo
 |---|---|
 | ![Light](docs/novapad-light.png) | |
 
+## New in 1.1.0
+
+- Dockable **AI Assistant** for OpenAI-compatible and Anthropic APIs, with
+  provider/base URL/model selection and explicit **Add selected code**.
+- API keys stay in memory; verified HTTPS (except loopback), no redirects,
+  cancellation and bounded requests. See [AI usage and security](docs/AI.md).
+- Four-column **Indentation Guides**, persistent under View; maximized startup
+  and correct full-screen restoration; a new white-background application icon.
+- TLS-enabled Linux packages and build/test/package checks on all three platforms.
+
 ## 🚀 Features
 
 ### Everything in Notepad
 - **File**: New, New Window, Open, Save, Save As, Page Setup, Print Preview, Print
 - **Edit**: Undo/Redo, Cut/Copy/Paste/Delete, Find (F3 / Shift+F3), Replace, Go To Line, Select All, Time/Date (F5)
 - **Format**: Word Wrap, Font… (live font picker for the whole editor)
-- **View**: Zoom In / Out / Reset (Ctrl+mouse wheel too), Full Screen (`F11`), Status Bar toggle, persistent auto-close Brackets & Quotes setting
+- **View**: Zoom In / Out / Reset (Ctrl+mouse wheel too), Full Screen (`F11`), Status Bar toggle, persistent Indentation Guides and auto-close Brackets & Quotes settings, AI Assistant (`Ctrl+Shift+A`)
 - UTF-8 by default, BOM detection & preservation, automatic fallback for non-UTF-8 (ANSI) files
 
 ### …plus the Notepad++ extras
@@ -51,11 +61,13 @@ NovaPad takes everything you know from **Windows Notepad** — and everything yo
 - 🌗 **Two polished themes** — Nova Dark (VS Code Dark+ palette) and Nova Light, switchable instantly
 - ↩️ **EOL handling** — LF / CRLF conversion & status, encoding (UTF-8 / UTF-8-BOM) per tab
 - 🖨️ Full printing support with preview (system printer or print-to-PDF)
+- 🤖 **AI Assistant** — explicit, single-turn text requests; editable provider/base URL/model, selected-code context, masked memory-only API key; no automatic document upload or code execution
 
 ### Under the hood
 - Pure **C++17 / Qt Widgets** — no QML, no web engine, tiny memory footprint
 - **Fonts embedded in the executable** (JetBrains Mono + Fira Sans, both SIL OFL) — identical look on every machine
-- Ships with a built-in **self-test suite** (`novapad --selftest`, 55 checks), a tab-lifecycle stress test (`novapad --stress`), and version output (`novapad --version` / `-v`); CI runs the tests on Linux
+- Ships with a built-in **self-test suite** (`novapad --selftest`), tab-lifecycle stress test (`novapad --stress`), TLS backend check (`novapad --tls-check`), and version output (`novapad --version` / `-v`); CI runs them on Linux, Windows and macOS, then tests each deployed package
+- Tests use isolated temporary settings and offline mock API servers. See the [verification checklist and limitations](docs/TESTING.md)
 
 ## ⌨️ Keyboard shortcuts
 
@@ -73,6 +85,7 @@ NovaPad takes everything you know from **Windows Notepad** — and everything yo
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo | `Esc` | Close find panel |
 | `Home` / `Shift+Home` | Smart line start / select to smart start | `Ctrl+Backspace` / `Ctrl+Delete` | Delete previous / next word |
 | `F11` | Toggle full screen | `Ctrl+mouse wheel` | Zoom in / out |
+| `Ctrl+Shift+A` | Toggle AI Assistant | | |
 
 ## 📦 Download
 
@@ -84,9 +97,14 @@ Grab a ready-made build from the [**Releases**](https://github.com/SiktirStudio/
 | Linux (x64) | `NovaPad-v…-Linux-x64.tar.gz` — untar and run `novapad` |
 | macOS (Apple Silicon) | `NovaPad-v…-macOS-arm64.dmg` |
 
+Linux packages include a launcher (`./novapad`), Qt Network, TLS plugins and
+OpenSSL 3; they target Ubuntu 24.04 or compatible newer distributions. System
+desktop libraries and CA certificates are still required. Windows builds are unsigned and macOS builds are only ad-hoc signed,
+not Developer ID signed or notarized and may show OS security warnings.
+
 ## 🔨 Build from source
 
-Requirements: **CMake ≥ 3.21**, a C++17 compiler, and **Qt ≥ 6.2** (`qtbase` with Widgets + PrintSupport).
+Requirements: **CMake ≥ 3.21**, a C++17 compiler, and **Qt ≥ 6.4** (`qtbase` with Widgets + PrintSupport + Network).
 
 ```bash
 # Debian/Ubuntu: sudo apt install build-essential cmake ninja-build qt6-base-dev
@@ -105,6 +123,11 @@ cmake --build build --config Release --parallel
 build\bin\novapad.exe
 ```
 
+Run tests with `QT_QPA_PLATFORM=offscreen ctest --test-dir build -C Release --output-on-failure`.
+See [TESTING.md](docs/TESTING.md) for platform-specific instructions, package
+verification and the PR/CI/tag/release procedure. Icon regeneration is optional:
+`python -m pip install Pillow` then `python tools/generate_icon.py`.
+
 ## 🗺️ Project layout
 
 ```
@@ -118,6 +141,9 @@ build\bin\novapad.exe
     ├── highlighter.*       hand-written multi-language syntax scanner
     ├── languages.*         declarative language definitions (13 languages)
     ├── findpanel.*         floating find/replace card
+    ├── ai.*                verified/bounded API requests and provider protocols
+    ├── aipanel.*           AI dock UI; allowlisted non-secret preferences
+    ├── aitests.*           offline AI/network/settings regression tests
     ├── themes.*            dark/light palettes + full QSS stylesheet
     ├── icons.*             all toolbar icons drawn programmatically
     ├── search.*            find/replace engine (regex, backrefs, replace-all)
@@ -126,7 +152,8 @@ build\bin\novapad.exe
 
 ## 📄 License
 
-Code is released under the [MIT License](LICENSE).
+Code is released under the [MIT License](LICENSE). Bundled runtime libraries
+retain their own licenses; see [third-party notices](THIRD_PARTY.md).
 The bundled fonts ([JetBrains Mono](resources/fonts/LICENSE-JetBrainsMono.txt), [Fira Sans](resources/fonts/LICENSE-Fira.txt)) are licensed under the SIL Open Font License 1.1.
 
 ---
@@ -149,7 +176,10 @@ The bundled fonts ([JetBrains Mono](resources/fonts/LICENSE-JetBrainsMono.txt), 
 - بازگشت خودکار فایل‌های باز (Session) و بارگذاری مجدد خودکار هنگام تغییر فایل
 - نمایش Encoding و نوع پایان خط (CRLF/LF) و تبدیل آن‌ها
 - فونت‌ها داخل خود برنامه تعبیه شده‌اند و در همهٔ سیستم‌ها یکسان نمایش داده می‌شوند
-- خودآزمایی داخلی با ۵۵ بررسی (`novapad --selftest`)، آزمون تنش تب‌ها (`novapad --stress`) و نمایش نسخه با `novapad --version`
+- پنل **AI Assistant** برای OpenAI-compatible و Anthropic با انتخاب Provider/Base URL/Model و افزودن صریح کد انتخاب‌شده؛ کلید فقط در حافظه است و در تنظیمات ذخیره نمی‌شود ([راهنما و امنیت](docs/AI.md))
+- راهنمای تورفتگی چهارستونه با تنظیم ماندگار View، شروع maximized و بازیابی درست حالت پنجره پس از Full Screen؛ آیکون تازه با پس‌زمینهٔ سفید
+- خودآزمایی (`novapad --selftest`)، آزمون تنش تب‌ها (`novapad --stress`)، بررسی TLS (`novapad --tls-check`) و نسخه؛ اجرای آزمون‌ها در CI هر سه سیستم‌عامل و روی بسته‌ها
+- بستهٔ لینوکس دارای TLS/OpenSSL است؛ آزمون‌های AI آفلاین هستند و فراخوانی واقعی API پولی انجام نمی‌دهند ([محدودیت‌ها و چک‌لیست](docs/TESTING.md))
 
 ### اجرا و ساخت
 از بخش [Releases](https://github.com/SiktirStudio/txt-reader/releases) نسخهٔ آمادهٔ ویندوز، لینوکس یا مک را دانلود کنید، یا از سورس بسازید:

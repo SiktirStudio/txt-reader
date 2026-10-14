@@ -11,6 +11,10 @@
 #include <QDesktopServices>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QDockWidget>
+#include <QImage>
+#include <QSignalBlocker>
+#include <QWindowStateChangeEvent>
 #include <QFileDialog>
 #include <QFileSystemWatcher>
 #include <QFontDialog>
@@ -59,6 +63,8 @@
 #endif
 
 #include "editor.h"
+#include "aipanel.h"
+#include "aitests.h"
 #include "findpanel.h"
 #include "highlighter.h"
 #include "icons.h"
@@ -207,6 +213,19 @@ void MainWindow::setupUi()
 
     m_findPanel = new FindPanel(this);
     m_findPanel->hide();
+
+    m_aiDock = new QDockWidget(tr("AI Assistant"), this);
+    m_aiDock->setObjectName(QStringLiteral("aiDock"));
+    m_aiDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_aiPanel = new AiPanel(m_aiDock);
+    m_aiPanel->setObjectName(QStringLiteral("aiPanel"));
+    m_aiDock->setWidget(m_aiPanel);
+    addDockWidget(Qt::RightDockWidgetArea, m_aiDock);
+    m_aiDock->hide();
+    connect(m_aiPanel, &AiPanel::selectionRequested, this, [this] {
+        Editor *editor = currentEditor();
+        m_aiPanel->appendSelectedCode(editor ? editor->textCursor().selectedText() : QString());
+    });
 
     m_watcher = new QFileSystemWatcher(this);
     connect(m_watcher, &QFileSystemWatcher::fileChanged,
@@ -424,6 +443,11 @@ void MainWindow::setupMenus()
     m_actLineNumbers->setChecked(true);
     connect(m_actLineNumbers, &QAction::toggled, this, &MainWindow::onLineNumbersToggled);
 
+    m_actIndentationGuides = viewMenu->addAction(tr("&Indentation Guides"));
+    m_actIndentationGuides->setCheckable(true);
+    m_actIndentationGuides->setChecked(true);
+    connect(m_actIndentationGuides, &QAction::toggled, this, &MainWindow::onIndentationGuidesToggled);
+
     m_actStatusbar = viewMenu->addAction(tr("&Status Bar"));
     m_actStatusbar->setCheckable(true);
     m_actStatusbar->setChecked(true);
@@ -434,15 +458,19 @@ void MainWindow::setupMenus()
     m_actFullScreen->setCheckable(true);
     m_actFullScreen->setShortcut(QKeySequence(Qt::Key_F11));
     connect(m_actFullScreen, &QAction::toggled, this, [this](bool on) {
-        if (on)
+        if (on) {
+            m_stateBeforeFullScreen = windowState() & ~Qt::WindowMinimized;
             showFullScreen();
-        else
+        } else if (m_stateBeforeFullScreen.testFlag(Qt::WindowMaximized)) {
+            showMaximized();
+        } else {
             showNormal();
+        }
     });
-    connect(viewMenu, &QMenu::aboutToShow, this, [this]() {
-        if (m_actFullScreen->isChecked() != isFullScreen())
-            m_actFullScreen->setChecked(isFullScreen());
-    });
+
+    QAction *aiToggle = m_aiDock->toggleViewAction();
+    aiToggle->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+A")));
+    viewMenu->addAction(aiToggle);
 
     m_actAutoClose = viewMenu->addAction(tr("Auto-close Brackets && Quotes"));
     m_actAutoClose->setCheckable(true);
@@ -599,6 +627,7 @@ MainWindow::TabData *MainWindow::addTab(const QString &filePath)
                                      ? QPlainTextEdit::WidgetWidth
                                      : QPlainTextEdit::NoWrap);
     tab->editor->setShowLineNumbers(m_actLineNumbers && m_actLineNumbers->isChecked());
+    tab->editor->setIndentationGuides(m_actIndentationGuides && m_actIndentationGuides->isChecked());
     tab->editor->setAutoCloseBrackets(m_actAutoClose && m_actAutoClose->isChecked());
 
     tab->highlighter = new SyntaxHighlighter(tab->editor->document());
@@ -1409,6 +1438,14 @@ void MainWindow::onLineNumbersToggled(bool on)
         t->editor->setShowLineNumbers(on);
 }
 
+void MainWindow::onIndentationGuidesToggled(bool on)
+{
+    for (TabData *t : m_tabs)
+        t->editor->setIndentationGuides(on);
+    QSettings settings;
+    settings.setValue(QStringLiteral("ui/indentationGuides"), on);
+}
+
 void MainWindow::onStatusbarToggled(bool on)
 {
     statusBar()->setVisible(on);
@@ -1624,6 +1661,10 @@ void MainWindow::readSettings()
     m_actLineNumbers->setChecked(lineNumbers);
     onLineNumbersToggled(lineNumbers);
 
+    const bool guides = settings.value(QStringLiteral("ui/indentationGuides"), true).toBool();
+    m_actIndentationGuides->setChecked(guides);
+    onIndentationGuidesToggled(guides);
+
     const bool statusbar = settings.value(QStringLiteral("ui/statusbar"), true).toBool();
     m_actStatusbar->setChecked(statusbar);
     onStatusbarToggled(statusbar);
@@ -1660,6 +1701,7 @@ void MainWindow::writeSettings()
     settings.setValue(QStringLiteral("ui/dark"), m_dark);
     settings.setValue(QStringLiteral("ui/wrap"), m_actWrap->isChecked());
     settings.setValue(QStringLiteral("ui/lineNumbers"), m_actLineNumbers->isChecked());
+    settings.setValue(QStringLiteral("ui/indentationGuides"), m_actIndentationGuides->isChecked());
     settings.setValue(QStringLiteral("ui/statusbar"), m_actStatusbar->isChecked());
     settings.setValue(QStringLiteral("ui/autoClose"), m_actAutoClose->isChecked());
     settings.setValue(QStringLiteral("ui/fontFamily"), m_editorFont.family());
@@ -1685,6 +1727,18 @@ QString MainWindow::lastUsedDir() const
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
+
+void MainWindow::changeEvent(QEvent *event)
+{
+    QMainWindow::changeEvent(event);
+    if (event->type() != QEvent::WindowStateChange || !m_actFullScreen)
+        return;
+    const auto *change = static_cast<QWindowStateChangeEvent *>(event);
+    if (isFullScreen() && !change->oldState().testFlag(Qt::WindowFullScreen))
+        m_stateBeforeFullScreen = change->oldState() & ~Qt::WindowMinimized;
+    const QSignalBlocker blocker(m_actFullScreen);
+    m_actFullScreen->setChecked(isFullScreen());
+}
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
@@ -2001,7 +2055,9 @@ bool MainWindow::stressTest()
 int MainWindow::runSelfTest()
 {
     int failures = 0;
-    auto CHECK = [&failures](bool ok, const char *what) {
+    int checks = 0;
+    auto CHECK = [&failures, &checks](bool ok, const char *what) {
+        ++checks;
         if (ok) {
             qInfo("[pass] %s", what);
         } else {
@@ -2334,6 +2390,48 @@ int MainWindow::runSelfTest()
         CHECK(e.toPlainText() == QStringLiteral("int a;\nint b;"), "toggle comment: uncomment");
     }
 
-    qInfo("SELFTEST %s", failures == 0 ? "PASSED" : "FAILED");
+    // ---- Indentation, settings, window-state and resource regressions --------
+    CHECK(Editor::indentationColumns(QStringLiteral("    x")) == 4, "Guides: four spaces");
+    CHECK(Editor::indentationColumns(QStringLiteral(" \t  x")) == 6, "Guides: mixed tab stops");
+    CHECK(Editor::indentationColumns(QStringLiteral("\t\tx")) == 8, "Guides: tabs are four columns");
+    CHECK(Editor::indentationColumns(QStringLiteral("x    ")) == 0, "Guides: only leading whitespace");
+    {
+        MainWindow window;
+        CHECK(window.currentEditor()->indentationGuides(), "Guides: enabled by default");
+        window.m_actIndentationGuides->setChecked(false);
+        CHECK(!window.currentEditor()->indentationGuides(), "Guides: toggle existing tab");
+        CHECK(!window.addTab(QString())->editor->indentationGuides(), "Guides: new tab inherits toggle");
+        CHECK(!QSettings().value(QStringLiteral("ui/indentationGuides"), true).toBool(),
+              "Guides: toggle saved immediately");
+        window.showMaximized();
+        QApplication::processEvents();
+        CHECK(window.isMaximized(), "Window: maximized startup state");
+        window.m_actFullScreen->setChecked(true);
+        QApplication::processEvents();
+        CHECK(window.isFullScreen(), "Window: enter full screen");
+        window.m_actFullScreen->setChecked(false);
+        QApplication::processEvents();
+        CHECK(window.isMaximized() && !window.isFullScreen(), "Window: restore maximized from full screen");
+        window.showNormal();
+        window.m_actFullScreen->setChecked(true);
+        window.m_actFullScreen->setChecked(false);
+        CHECK(!window.isMaximized() && !window.isFullScreen(), "Window: restore normal from full screen");
+        window.showFullScreen();
+        CHECK(window.m_actFullScreen->isChecked(), "Window: native state updates menu");
+        window.showNormal();
+        CHECK(!window.m_actFullScreen->isChecked(), "Window: native exit updates menu");
+    }
+    {
+        MainWindow window;
+        CHECK(!window.currentEditor()->indentationGuides(), "Guides: preference restored in next window");
+        window.m_actIndentationGuides->setChecked(true);
+    }
+    const QImage icon(QStringLiteral(":/appicon.png"));
+    CHECK(!icon.isNull() && icon.width() >= 256 && icon.pixelColor(0, 0) == QColor(Qt::white)
+              && icon.pixelColor(icon.width() - 1, icon.height() - 1) == QColor(Qt::white),
+          "Icon: embedded PNG has opaque white background");
+    runAiSelfTests(CHECK);
+
+    qInfo("SELFTEST %s (%d checks)", failures == 0 ? "PASSED" : "FAILED", checks);
     return failures == 0 ? 0 : 1;
 }

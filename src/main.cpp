@@ -3,13 +3,16 @@
 #include <QFontDatabase>
 #include <QIcon>
 #include <QSettings>
+#include <QSslSocket>
+#include <QTemporaryDir>
+#include <memory>
 #include <QStyleFactory>
 #include <cstdio>
 
 #include "mainwindow.h"
 
 #ifndef NOVAPAD_VERSION
-#define NOVAPAD_VERSION "1.0.0"
+#define NOVAPAD_VERSION "1.1.0"
 #endif
 
 static void loadEmbeddedFonts()
@@ -54,7 +57,24 @@ int main(int argc, char *argv[])
 
     QStringList args = app.arguments();
 
+    // Test preferences and sessions must never touch the user's real settings.
+    std::unique_ptr<QTemporaryDir> testSettings;
+    if (args.contains(QStringLiteral("--selftest")) || args.contains(QStringLiteral("--stress"))) {
+        testSettings = std::make_unique<QTemporaryDir>();
+        if (!testSettings->isValid())
+            return 1;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, testSettings->path());
+        QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, testSettings->path());
+    }
+
     // Developer / CI helpers -------------------------------------------------
+    if (args.removeOne(QStringLiteral("--tls-check"))) {
+        const bool available = QSslSocket::supportsSsl();
+        qInfo("TLS %s (backend: %s)", available ? "OK" : "UNAVAILABLE",
+              qPrintable(QSslSocket::activeBackend()));
+        return available ? 0 : 1;
+    }
     if (args.removeOne(QStringLiteral("--selftest")))
         return MainWindow::runSelfTest();
     if (args.removeOne(QStringLiteral("--stress"))) {
@@ -78,7 +98,7 @@ int main(int argc, char *argv[])
         return win.takeScreenshots(shotDir, QStringLiteral("dark")) ? 0 : 1;
     }
 
-    win.show();
+    win.showMaximized();
     if (!files.isEmpty())
         win.openPaths(files);
     return app.exec();

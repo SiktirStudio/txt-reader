@@ -35,6 +35,7 @@ public:
     void setPalette(const EditorPalette &palette);
     EditorPalette palette() const { return m_palette; }
 
+    static int indentationColumns(const QString &line);
     static int smartHomeTarget(const QString &line, int column);
     static int findMatchingBracket(const QString &text, int position, int scanLimit = 20000);
 
@@ -51,6 +52,8 @@ public:
     void setShowLineNumbers(bool on);
     bool showLineNumbers() const { return m_showLineNumbers; }
     void selectLineAtY(int y);
+    void setIndentationGuides(bool on);
+    bool indentationGuides() const { return m_indentationGuides; }
 
     // Extra selections managed by MainWindow (search highlights, word matches)
     void setSearchSelections(const QList<QTextEdit::ExtraSelection> &selections);
@@ -73,6 +76,7 @@ signals:
     void fontSizeChanged(int size);
 
 protected:
+    void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
@@ -95,6 +99,7 @@ private:
     QFont m_font;
     int m_baseFontSize = 11;
     bool m_showLineNumbers = true;
+    bool m_indentationGuides = true;
     bool m_highlightCurrentLine = true;
     bool m_autoCloseBrackets = true;
     QString m_eolLabel;

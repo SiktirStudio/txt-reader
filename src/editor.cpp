@@ -4,6 +4,9 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QKeyEvent>
+#include <QFontMetricsF>
+#include <QPaintEvent>
+#include <QTextLayout>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
@@ -87,6 +90,7 @@ Editor::Editor(QWidget *parent)
     setFrameShape(QFrame::NoFrame);
     setCursorWidth(2);
     setCenterOnScroll(false);
+    setTabStopDistance(QFontMetricsF(this->font()).horizontalAdvance(QLatin1Char(' ')) * 4);
 
     m_lineArea = new LineNumberArea(this);
 
@@ -113,6 +117,61 @@ void Editor::setPalette(const EditorPalette &palette)
     highlightCurrentLine();
     updateBracketMatch();
     m_lineArea->update();
+}
+
+int Editor::indentationColumns(const QString &line)
+{
+    int columns = 0;
+    for (QChar ch : line) {
+        if (ch == QLatin1Char(' '))
+            ++columns;
+        else if (ch == QLatin1Char('\t'))
+            columns += 4 - columns % 4;
+        else
+            break;
+    }
+    return columns;
+}
+
+void Editor::setIndentationGuides(bool on)
+{
+    m_indentationGuides = on;
+    viewport()->update();
+}
+
+void Editor::paintEvent(QPaintEvent *event)
+{
+    QPlainTextEdit::paintEvent(event);
+    if (!m_indentationGuides)
+        return;
+    QPainter painter(viewport());
+    painter.setClipRect(event->rect());
+    painter.setPen(QPen(m_palette.indentGuide, 1, Qt::DotLine));
+    const qreal space = QFontMetricsF(this->font()).horizontalAdvance(QLatin1Char(' '));
+    if (space <= 0)
+        return;
+    for (QTextBlock block = firstVisibleBlock(); block.isValid(); block = block.next()) {
+        const QRectF geometry = blockBoundingGeometry(block).translated(contentOffset());
+        if (geometry.top() > event->rect().bottom())
+            break;
+        if (!block.isVisible() || geometry.bottom() < event->rect().top())
+            continue;
+        const QTextLayout *layout = block.layout();
+        if (!layout || layout->lineCount() == 0)
+            continue;
+        const QTextLine line = layout->lineAt(0);
+        const qreal left = geometry.left() + line.cursorToX(0);
+        const int columns = indentationColumns(block.text());
+        // Bound work by viewport width, even for very deeply indented lines.
+        int column = qMax(4, int((event->rect().left() - left) / (space * 4)) * 4);
+        for (; column <= columns; column += 4) {
+            const qreal x = left + (column - 0.5) * space;
+            if (x > event->rect().right())
+                break;
+            painter.drawLine(QPointF(x, geometry.top() + line.y()),
+                             QPointF(x, geometry.top() + line.y() + line.height()));
+        }
+    }
 }
 
 int Editor::smartHomeTarget(const QString &line, int column)
@@ -174,6 +233,7 @@ void Editor::setCustomFont(const QFont &font, int baseSize)
     if (m_font.pointSize() <= 0)
         m_font.setPointSize(baseSize);
     QPlainTextEdit::setFont(m_font);
+    setTabStopDistance(QFontMetricsF(this->font()).horizontalAdvance(QLatin1Char(' ')) * 4);
     updateLineNumberAreaWidth(0);
     emit fontSizeChanged(m_font.pointSize());
 }
@@ -186,6 +246,7 @@ void Editor::zoomStep(int delta)
         return;
     m_font.setPointSize(size);
     QPlainTextEdit::setFont(m_font);
+    setTabStopDistance(QFontMetricsF(this->font()).horizontalAdvance(QLatin1Char(' ')) * 4);
     updateLineNumberAreaWidth(0);
     emit fontSizeChanged(size);
 }
@@ -194,6 +255,7 @@ void Editor::resetZoom()
 {
     m_font.setPointSize(m_baseFontSize);
     QPlainTextEdit::setFont(m_font);
+    setTabStopDistance(QFontMetricsF(this->font()).horizontalAdvance(QLatin1Char(' ')) * 4);
     updateLineNumberAreaWidth(0);
     emit fontSizeChanged(m_baseFontSize);
 }
